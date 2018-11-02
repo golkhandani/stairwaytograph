@@ -1,13 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const {
-    graphqlExpress,
-    graphiqlExpress
-} = require('graphql-server-express');
 
-
-
-const controller = require('../controllers/index');
 
 
 
@@ -19,8 +12,8 @@ router.get('/ping', (req, res, next) => {
     res.send('pong');
 });
 
-router.post('/users', controller.addUser);
-router.post('/books', controller.addBook);
+// router.post('/users', controller.addUser);
+// router.post('/books', controller.addBook);
 
 
 
@@ -52,7 +45,7 @@ const Book = new GraphQLObjectType({
           type: GraphQLString
         },
         isbn: {
-          type: GraphQLString,
+          type: GraphQLString
         },
         authorIds:{
             type :new GraphQLList(GraphQLString)
@@ -60,13 +53,11 @@ const Book = new GraphQLObjectType({
         authors: {
             type: new GraphQLList(User),
             resolve : async ({authorIds})=>{
-                console.log("authorIds",authorIds)
-                var a = []
+                var a = [];
                 for (const item of authorIds) {
-                    console.log("authorId",item)
-                    a.push(prepare(await UserModel.findOne({_id:item}).lean()))
+                    a.push(prepare(await UserModel.findOne({_id:item}).lean()));
                 }
-                return a
+                return a;
             }
         }
       })
@@ -89,6 +80,25 @@ const User = new GraphQLObjectType({
         }
       })
 });
+
+const Mutation =new GraphQLObjectType({
+    name:'Mutation',
+    fields:()=>({
+        CreateUser: {
+            type: User,
+            async resolve({body}) {
+                return prepare((await UserModel.create(body)).toObject()) 
+            }
+          },
+        CreateBook: {
+            type: Book,
+            async resolve({body}) {
+                return prepare((await BookModel.create(body)).toObject()) 
+            }
+          },
+    })
+})
+
 const Query = new GraphQLObjectType({
     name: 'Query',
     fields: () => ({
@@ -113,7 +123,8 @@ const Query = new GraphQLObjectType({
     })
 });
 const Schema = new GraphQLSchema({
-  query: Query
+  query: Query,
+  mutation:Mutation
 });
 
 
@@ -128,13 +139,13 @@ var userQuery = `{
 }`;
 var booksQuery = `{
     books {
+        _id
         title 
         authors { 
             name
         }
     }
 }`;
-
 var bookQuery = `{
     book {
         title 
@@ -143,15 +154,36 @@ var bookQuery = `{
         }
     }
 }`;
-router.use('/users/all',async (req,res,next) => {
-    res.send(await graphql(Schema,userQuery))
-})
-router.use('/books/all',async (req,res,next) => {
-    res.send(await graphql(Schema,booksQuery,{userId:"5bdc2e7cb2664d0c9040c637"}))
-})
+var CreateUser = `mutation {
+    CreateUser {
+        name
+        _id
+    }
+}`;
+var CreateBook = `mutation {
+    CreateBook {
+        title
+        _id
+    }
+}`;
 
-router.use('/books/:bookId',async (req,res,next) => {
-    res.send(await graphql(Schema,bookQuery,{bookId:"5bdc2e7cb2664d0c9040c637"}))
-})
+
+
+router.get('/users/all',async (req,res,next) => {
+    res.send(await graphql(Schema,userQuery))
+});
+router.get('/books',async (req,res,next) => {
+    res.send(await graphql(Schema,booksQuery))
+});
+router.get('/books/:bookId',async (req,res,next) => {
+    res.send(await graphql(Schema,bookQuery,{bookId:req.params.bookId}))
+});
+router.post('/users',async (req,res,next) => {
+    res.send(await graphql(Schema,CreateUser,{body:req.body}))
+});
+router.post('/books',async (req,res,next) => {
+    res.send(await graphql(Schema,CreateBook,{body:req.body}))
+});
+
 
 module.exports = router;
